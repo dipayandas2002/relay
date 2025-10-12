@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOME AUTOMATION BY DD</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen transition-colors duration-500">
+
+  <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
+    <h1 class="text-3xl font-bold mb-6">Home Automation Control</h1>
+
+    <!-- Light Toggle -->
+    <div class="flex items-center justify-between mb-6">
+      <span class="text-lg font-medium">Light One:</span>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="lightOne" class="sr-only peer">
+        <div class="w-14 h-8 bg-gray-600 rounded-full peer peer-checked:bg-blue-500 transition-colors"></div>
+        <div class="absolute left-1 top-1 w-6 h-6 bg-white rounded-full peer-checked:translate-x-6 transform transition-transform"></div>
+      </label>
+    </div>
+
+<!-- Schedule Section -->
+<div class="flex flex-col items-center mb-6 w-full">
+  <label class="text-lg font-medium mb-2">Set Light Schedule</label>
+  <div class="relative w-full max-w-xs">
+    <!-- Clock Icon -->
+    <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+    </span>
+    <input type="time" id="scheduleTime" class="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors">
+  </div>
+  <button id="saveSchedule" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md">
+    Save Schedule
+  </button>
+</div>
+
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
+    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAsStgGUdvG2ol_PThdSvq_gwqj9PNGtfI",
+      authDomain: "esp32ddas.firebaseapp.com",
+      databaseURL: "https://esp32ddas-default-rtdb.firebaseio.com",
+      projectId: "esp32ddas",
+      storageBucket: "esp32ddas.firebasestorage.app",
+      messagingSenderId: "46440929820",
+      appId: "1:46440929820:web:6d0791c65748f1b20d1dd9"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+
+    const lightOne = document.getElementById('lightOne');
+    const scheduleTime = document.getElementById('scheduleTime');
+    const saveSchedule = document.getElementById('saveSchedule');
+    const currentTimeEl = document.getElementById('currentTime');
+
+    // ------------------------------
+    // Manual toggle of relay
+    lightOne.addEventListener('change', () => {
+      const newState = lightOne.checked ? 'ON' : 'OFF';
+      update(ref(db, 'relay'), { state: newState, currentState: newState });
+    });
+
+    // ------------------------------
+    // Save schedule to onHour and onMinute
+    saveSchedule.addEventListener('click', () => {
+      const [hour, minute] = scheduleTime.value.split(":").map(Number);
+      update(ref(db, 'relay'), { onHour: hour, onMinute: minute });
+      alert(`Schedule set: ${hour}:${minute}`);
+    });
+
+    // ------------------------------
+    // Listen to Firebase for currentState
+    onValue(ref(db, 'relay/currentState'), (snapshot) => {
+      const val = snapshot.val();
+      lightOne.checked = val === 'ON';
+    });
+
+    // ------------------------------
+    // Listen to schedule changes
+    onValue(ref(db, 'relay/onHour'), (snapshot) => {
+      const hour = snapshot.val();
+      if (hour != null) scheduleTime.value = `${String(hour).padStart(2,'0')}:${scheduleTime.value.split(":")[1] || "00"}`;
+    });
+
+    onValue(ref(db, 'relay/onMinute'), (snapshot) => {
+      const minute = snapshot.val();
+      if (minute != null) scheduleTime.value = `${scheduleTime.value.split(":")[0]}:${String(minute).padStart(2,'0')}`;
+    });
+
+    // ------------------------------
+    // Listen to currentTime
+    onValue(ref(db, 'relay/currentTime'), (snapshot) => {
+      currentTimeEl.textContent = snapshot.val() || '--:--';
+    });
+
+  </script>
+</body>
+</html>
