@@ -69,7 +69,7 @@
       console.log("✅ Connected to MQTT broker");
 
       // Subscribe to topics
-      client.subscribe([topicState, topicHour, topicMinute, topicTime]);
+      client.subscribe([topicState]);
 
       // Request current state immediately by publishing a blank message (optional if ESP32 responds automatically)
       // client.publish("home/relay1/getState", "");
