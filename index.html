@@ -3,15 +3,16 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HOME AUTOMATION BY DD</title>
+  <title>HOME AUTOMATION BY DD - MQTT</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body class="bg-gray-900 text-white flex items-center justify-center min-h-screen transition-colors duration-500">
 
   <div class="bg-gray-800 p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
     <h1 class="text-3xl font-bold mb-6">Home Automation Control</h1>
 
-    <!-- Light Toggle -->
+    <!-- Relay Toggle -->
     <div class="flex items-center justify-between mb-6">
       <span class="text-lg font-medium">Light One:</span>
       <label class="relative inline-flex items-center cursor-pointer">
@@ -21,86 +22,90 @@
       </label>
     </div>
 
-<!-- Schedule Section -->
-<div class="flex flex-col items-center mb-6 w-full">
-  <label class="text-lg font-medium mb-2">Set Light Schedule</label>
-  <div class="relative w-full max-w-xs">
-    <!-- Clock Icon -->
-    <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">
-      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-      </svg>
-    </span>
-    <input type="time" id="scheduleTime" class="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors">
+    <!-- Schedule Section -->
+    <div class="flex flex-col items-center mb-6 w-full">
+      <label class="text-lg font-medium mb-2">Set Light Schedule</label>
+      <div class="relative w-full max-w-xs">
+        <span class="absolute inset-y-0 left-3 flex items-center text-gray-400">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </span>
+        <input type="time" id="scheduleTime" class="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-600 bg-gray-700 text-white focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors">
+      </div>
+      <button id="saveSchedule" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md">
+        Save Schedule
+      </button>
+    </div>
+
+    <p class="text-sm mt-2">Current Time: <span id="currentTime">--:--:--</span></p>
   </div>
-  <button id="saveSchedule" class="mt-4 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-6 rounded-lg transition-colors shadow-md">
-    Save Schedule
-  </button>
-</div>
 
+  <script>
+    // MQTT connection settings
+    const mqttServer = "wss://e6e7dac5f1a2475382f05acc556ef6d7.s1.eu.hivemq.cloud:8884/mqtt";
+    const mqttUser = "dipudas";
+    const mqttPassword = "Dipu2002";
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-app.js";
-    import { getDatabase, ref, set, onValue, update } from "https://www.gstatic.com/firebasejs/12.0.0/firebase-database.js";
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyAsStgGUdvG2ol_PThdSvq_gwqj9PNGtfI",
-      authDomain: "esp32ddas.firebaseapp.com",
-      databaseURL: "https://esp32ddas-default-rtdb.firebaseio.com",
-      projectId: "esp32ddas",
-      storageBucket: "esp32ddas.firebasestorage.app",
-      messagingSenderId: "46440929820",
-      appId: "1:46440929820:web:6d0791c65748f1b20d1dd9"
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const db = getDatabase(app);
+    // MQTT Topics
+    const topicState = "home/relay1/state";
+    const topicTime  = "home/relay1/time";
+    const topicHour  = "home/relay1/onHour";
+    const topicMinute= "home/relay1/onMinute";
 
     const lightOne = document.getElementById('lightOne');
     const scheduleTime = document.getElementById('scheduleTime');
     const saveSchedule = document.getElementById('saveSchedule');
     const currentTimeEl = document.getElementById('currentTime');
 
-    // ------------------------------
+    // Connect to MQTT broker
+    const client = mqtt.connect(mqttServer, {
+      username: mqttUser,
+      password: mqttPassword,
+      reconnectPeriod: 3000
+    });
+
+    client.on('connect', () => {
+      console.log("✅ Connected to MQTT broker");
+
+      // Subscribe to topics
+      client.subscribe([topicState, topicHour, topicMinute, topicTime]);
+
+      // Request current state immediately by publishing a blank message (optional if ESP32 responds automatically)
+      // client.publish("home/relay1/getState", "");
+    });
+
+    client.on('error', (err) => console.error("❌ MQTT Error:", err));
+
+    client.on('message', (topic, message) => {
+      const msg = message.toString();
+
+      if (topic === topicState) {
+        // Update the checkbox dynamically based on MQTT state
+        lightOne.checked = (msg === "ON");
+      } else if (topic === topicHour || topic === topicMinute) {
+        const [h, m] = scheduleTime.value.split(":");
+        if (topic === topicHour) scheduleTime.value = `${msg.padStart(2,"0")}:${m || "00"}`;
+        if (topic === topicMinute) scheduleTime.value = `${h || "00"}:${msg.padStart(2,"0")}`;
+      } else if (topic === topicTime) {
+        currentTimeEl.textContent = msg;
+      }
+    });
+
     // Manual toggle of relay
     lightOne.addEventListener('change', () => {
-      const newState = lightOne.checked ? 'ON' : 'OFF';
-      update(ref(db, 'relay'), { state: newState, currentState: newState });
+      const state = lightOne.checked ? "ON" : "OFF";
+      client.publish(topicState, state);
     });
 
-    // ------------------------------
-    // Save schedule to onHour and onMinute
+    // Save schedule
     saveSchedule.addEventListener('click', () => {
-      const [hour, minute] = scheduleTime.value.split(":").map(Number);
-      update(ref(db, 'relay'), { onHour: hour, onMinute: minute });
+      const [hour, minute] = scheduleTime.value.split(":");
+      client.publish(topicHour, hour);
+      client.publish(topicMinute, minute);
       alert(`Schedule set: ${hour}:${minute}`);
     });
-
-    // ------------------------------
-    // Listen to Firebase for currentState
-    onValue(ref(db, 'relay/currentState'), (snapshot) => {
-      const val = snapshot.val();
-      lightOne.checked = val === 'ON';
-    });
-
-    // ------------------------------
-    // Listen to schedule changes
-    onValue(ref(db, 'relay/onHour'), (snapshot) => {
-      const hour = snapshot.val();
-      if (hour != null) scheduleTime.value = `${String(hour).padStart(2,'0')}:${scheduleTime.value.split(":")[1] || "00"}`;
-    });
-
-    onValue(ref(db, 'relay/onMinute'), (snapshot) => {
-      const minute = snapshot.val();
-      if (minute != null) scheduleTime.value = `${scheduleTime.value.split(":")[0]}:${String(minute).padStart(2,'0')}`;
-    });
-
-    // ------------------------------
-    // Listen to currentTime
-    onValue(ref(db, 'relay/currentTime'), (snapshot) => {
-      currentTimeEl.textContent = snapshot.val() || '--:--';
-    });
-
   </script>
+
 </body>
 </html>
